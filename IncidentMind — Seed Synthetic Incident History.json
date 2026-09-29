@@ -1,0 +1,269 @@
+{
+  "name": "IncidentMind — Seed Synthetic Incident History",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7c61538f-2041-4631-9d2f-26c39aea6c9e",
+      "name": "Run Seeder",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "seed-bank",
+              "name": "bank_id",
+              "type": "string",
+              "value": "incidentmind-demo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1abd522-6700-4416-a7a1-f5f0880a0588",
+      "name": "Seed Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// 26 SYNTHETIC incidents with recurring patterns:\n// 6x DB connection-pool exhaustion (payment/checkout), 4x failed deployments, 4x API timeouts,\n// 3x auth-service failures, 3x memory leaks/OOM, 2x CPU saturation, 2x DNS/network, 2x cache (Redis).\nconst bank = $input.first().json.bank_id;\nconst D = [\n ['INC-101','payment-api','HIGH','2026-01-08T09:12:00Z','p95 latency 780ms, checkout timeouts','HikariPool-1 - Connection is not available, request timed out after 30000ms','Database connection pool exhausted (max 20) after traffic growth','Increased pool size 20->50, added pool saturation alert','RB-12 Connection Pool Exhaustion','resolved',34,'none','Pool sizing was never revisited after traffic doubled'],\n ['INC-119','payment-api','HIGH','2026-02-14T18:40:00Z','p95 latency 810ms during Valentine sale peak','HikariPool-1 - Connection is not available; active=50 idle=0 waiting=212','Connection pool exhausted by slow fraud-check query holding connections','Killed long-running queries, added index on fraud_checks.user_id, pool left at 50','RB-12 Connection Pool Exhaustion','resolved',41,'none','Slow queries hold connections; pool size alone is not enough'],\n ['INC-131','checkout-service','CRITICAL','2026-03-03T11:05:00Z','checkout 5xx 12%, latency 1.4s','PSQLException: FATAL: remaining connection slots are reserved','Postgres max_connections reached by new checkout replicas each holding 30 connections','Introduced PgBouncer transaction pooling, reduced per-pod pool to 10','RB-12 Connection Pool Exhaustion + RB-19 PgBouncer','resolved',55,'checkout-service scaled 6->12 pods','Scaling pods multiplies DB connections'],\n ['INC-184','payment-api','HIGH','2026-04-22T14:20:00Z','p95 latency 800ms after release','HikariPool-1 - Connection is not available, request timed out after 30000ms; leak detection triggered','Connection leak in payment-api v2.9.0 refund path (connection not closed on exception)','Rolled back to v2.8.4, then hotfix closing connections in finally block; enabled leakDetectionThreshold','RB-12 Connection Pool Exhaustion','resolved',28,'payment-api v2.9.0 deployed 30 min earlier','Deployments that touch DB code paths can leak connections; enable leak detection'],\n ['INC-212','payment-api','MEDIUM','2026-06-09T08:02:00Z','p95 latency 640ms, intermittent','HikariPool-1 - Pool stats (total=50, active=49, idle=1, waiting=37)','Connection pool near exhaustion from batch settlement job sharing the OLTP pool','Moved settlement job to dedicated read-replica pool','RB-12 Connection Pool Exhaustion','resolved',22,'new nightly settlement job','Batch jobs must not share the OLTP pool'],\n ['INC-231','payment-api','HIGH','2026-08-18T16:45:00Z','p95 latency 830ms, error rate 4%','HikariPool-1 - Connection is not available, request timed out after 30000ms','Connection pool exhaustion after v2.13 added per-request audit write doubling DB round trips','Made audit write async via queue, raised pool 50->80 temporarily','RB-12 Connection Pool Exhaustion','resolved',31,'payment-api v2.13.0 deployed 1h earlier','Third payment-api pool exhaustion within 5 months tied to a deployment increasing DB usage'],\n ['INC-107','order-service','HIGH','2026-01-20T13:00:00Z','500 errors on /orders after deploy','NullPointerException at OrderMapper.java:88','Bad deployment: missing config key ORDER_TAX_REGION in v5.2.0','Rolled back to v5.1.3, added config validation to CI','RB-03 Deployment Rollback','resolved',18,'order-service v5.2.0','Validate required config at startup'],\n ['INC-143','search-service','MEDIUM','2026-03-19T10:30:00Z','search returns empty results','IndexNotFoundException: products_v7','Deployment pointed to non-existent index alias','Rolled back, fixed alias migration order','RB-03 Deployment Rollback','resolved',25,'search-service v3.0.0','Run index migrations before app deploy'],\n ['INC-176','payment-api','CRITICAL','2026-04-10T07:15:00Z','all card payments failing','ClassNotFoundException: com.stripe.model.PaymentIntentV2','Failed deployment with incompatible SDK upgrade','Rolled back to previous image; pinned SDK version','RB-03 Deployment Rollback','resolved',14,'payment-api v2.8.0','Canary deploys would have caught this in 5 minutes'],\n ['INC-205','user-profile','HIGH','2026-05-28T15:50:00Z','CrashLoopBackOff on all pods','Error: Cannot find module ./config/prod.json','Build artifact missing config file after Dockerfile change','Rolled back image, restored COPY step','RB-03 Deployment Rollback','resolved',20,'user-profile v1.14.0','Smoke-test container start in CI'],\n ['INC-115','shipping-api','MEDIUM','2026-02-05T12:10:00Z','p99 5s, timeouts to carrier API','ReadTimeoutException: carrier-gateway after 5000ms','Third-party carrier API degraded','Enabled circuit breaker and cached quotes fallback','RB-07 Dependency Timeout','resolved',47,'none','Always wrap third-party calls with circuit breakers'],\n ['INC-158','payment-api','HIGH','2026-04-01T19:25:00Z','latency 900ms, timeouts to fraud provider','SocketTimeoutException: fraud-scoring.vendor.io read timed out','Fraud vendor latency spike','Lowered timeout to 800ms with fail-open policy approved by risk team','RB-07 Dependency Timeout','resolved',38,'none','Not every payment latency spike is the DB pool; check dependency timings first'],\n ['INC-190','notification-service','LOW','2026-05-06T09:40:00Z','emails delayed 20 min','TimeoutError: SMTP relay connect timeout','SMTP relay rate limiting','Switched to secondary relay, added backoff','RB-07 Dependency Timeout','resolved',60,'none','Keep a warm secondary provider'],\n ['INC-240','inventory-service','MEDIUM','2026-09-02T14:05:00Z','gRPC deadline exceeded to pricing','DEADLINE_EXCEEDED: pricing.GetPrice after 2s','Pricing service GC pauses','Tuned JVM heap on pricing, raised client deadline to 3s','RB-07 Dependency Timeout','resolved',44,'none','Deadlines must include downstream GC headroom'],\n ['INC-122','auth-service','CRITICAL','2026-02-20T06:00:00Z','all logins failing with 401','JWT verification failed: invalid signature (kid=2025-key)','Signing key rotated without publishing new JWKS to gateway cache','Republished JWKS, flushed gateway cache','RB-21 Auth Key Rotation','resolved',26,'scheduled key rotation','Key rotation must be two-phase: publish then switch'],\n ['INC-167','auth-service','HIGH','2026-04-15T22:10:00Z','intermittent 401 for mobile users','Token expired: exp claim 5 min in the past','Clock skew on 2 auth nodes after NTP failure','Restored NTP, added 60s leeway','RB-21 Auth Key Rotation','resolved',33,'none','Monitor clock drift'],\n ['INC-221','auth-service','HIGH','2026-07-11T08:30:00Z','login latency 3s, 503 spikes','Redis session store: max clients reached','Session store connection exhaustion under login storm','Raised Redis maxclients, added connection pooling in auth-service','RB-21 Auth Key Rotation + RB-12','resolved',29,'marketing push notification','Login storms follow push campaigns'],\n ['INC-129','recommendation-api','HIGH','2026-03-01T03:20:00Z','pods OOMKilled every 40 min','java.lang.OutOfMemoryError: Java heap space','Unbounded in-memory cache of user embeddings','Added LRU bound, heap dump alerting','RB-15 Memory Leak','resolved',65,'recommendation-api v4.1','Bound every in-process cache'],\n ['INC-182','report-worker','MEDIUM','2026-04-19T02:00:00Z','worker restarts, reports delayed','FATAL: JavaScript heap out of memory','Loading full CSV exports into memory','Switched to streaming parser','RB-15 Memory Leak','resolved',80,'none','Stream large files'],\n ['INC-236','payment-api','MEDIUM','2026-08-25T11:00:00Z','gradual latency creep over 6h, GC pauses','GC overhead limit exceeded','Memory leak in metrics tag cardinality (per-transaction tags)','Removed high-cardinality tag, restarted pods after approval','RB-15 Memory Leak','resolved',52,'payment-api v2.13.1','Latency creep with GC pauses differs from sudden pool exhaustion'],\n ['INC-150','image-resizer','MEDIUM','2026-03-25T17:00:00Z','CPU 100%, queue backlog','CPU throttling at limit 2 cores','Traffic spike from new product images; HPA max too low','Raised HPA max 10->25','RB-09 Capacity Scaling','resolved',30,'catalog import','Review HPA limits before catalog imports'],\n ['INC-198','checkout-service','HIGH','2026-05-17T20:00:00Z','CPU saturation, latency 700ms','CPU usage 98% on all pods; regex backtracking in coupon validator','Catastrophic regex backtracking on coupon codes','Hotfix regex, rate-limited coupon endpoint','RB-09 Capacity Scaling','resolved',42,'coupon campaign','Not all CPU spikes are capacity; profile first'],\n ['INC-135','api-gateway','CRITICAL','2026-03-10T04:45:00Z','intermittent 502 across services','getaddrinfo EAI_AGAIN payment-api.internal','CoreDNS pods overloaded after node pool upgrade','Scaled CoreDNS, enabled NodeLocal DNSCache','RB-05 DNS Failure','resolved',37,'k8s node pool upgrade','DNS is a shared dependency; cache locally'],\n ['INC-214','payment-api','HIGH','2026-06-20T13:30:00Z','ECONNRESET to payment processor','ECONNRESET upstream processor.api; TLS handshake failures','Processor rotated TLS intermediate CA; outdated trust store','Updated CA bundle after security approval','RB-05 Network/TLS','resolved',58,'none','Track upstream certificate changes'],\n ['INC-161','catalog-api','MEDIUM','2026-04-05T10:00:00Z','cache hit rate dropped to 10%, DB load x5','Redis evictions 40k/s','Redis maxmemory too small after catalog growth','Increased Redis memory, set TTL policy','RB-11 Cache Degradation','resolved',27,'catalog growth','Capacity-plan caches with catalog size'],\n ['INC-226','payment-api','MEDIUM','2026-07-30T09:15:00Z','latency 600ms after cache flush','Redis MISS storm; DB QPS 4x baseline','Cache stampede after manual flush saturating DB connection pool','Enabled request coalescing, warmed cache','RB-11 Cache Degradation + RB-12','resolved',24,'manual cache flush','Cache stampedes can present as pool exhaustion']\n];\nreturn D.map(function (r) {\n  const content = [\n    'IncidentMind resolved-incident record (SYNTHETIC DEMO DATA)',\n    'Incident ID: ' + r[0], 'Date: ' + r[3], 'Service: ' + r[1], 'Environment: production', 'Severity: ' + r[2],\n    'Symptoms: ' + r[4], 'Log signature: ' + r[5], 'Root cause: ' + r[6],\n    'Resolution: ' + r[7], 'Runbook used: ' + r[8], 'Outcome: ' + r[9] + ' after ' + r[10] + ' minutes',\n    'Recent changes / deployment: ' + r[11], 'Lesson learned: ' + r[12]\n  ].join('\\n');\n  return { json: {\n    bank_id: bank, incident_id: r[0], occurred_at: r[3], content: content,\n    metadata: { incident_id: r[0], service: r[1], environment: 'production', severity: r[2], runbook: r[8], outcome: r[9], resolution_minutes: String(r[10]), record_type: 'incident_resolution', data_origin: 'synthetic_demo' },\n    tags: ['record:incident', 'service:' + r[1], 'env:production', 'origin:synthetic']\n  } };\n});\n"
+      },
+      "id": "6807e98e-7bda-41fa-b2a8-743cf45d4853",
+      "name": "Build Synthetic Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Ag5L3gWEqOyZhrlq"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operation": "retain",
+            "bank_id": "={{ $json.bank_id }}",
+            "query": "",
+            "content": "={{ $json.content }}",
+            "document_id": "={{ $json.incident_id }}",
+            "context": "incident post-mortem",
+            "tags": "={{ $json.tags }}",
+            "metadata": "={{ $json.metadata }}",
+            "budget": "mid",
+            "async_mode": true,
+            "occurred_at": "={{ $json.occurred_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "operation",
+              "displayName": "operation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "bank_id",
+              "displayName": "bank_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "query",
+              "displayName": "query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "content",
+              "displayName": "content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "document_id",
+              "displayName": "document_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "context",
+              "displayName": "context",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "tags",
+              "displayName": "tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "array"
+            },
+            {
+              "id": "metadata",
+              "displayName": "metadata",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "budget",
+              "displayName": "budget",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "async_mode",
+              "displayName": "async_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "occurred_at",
+              "displayName": "occurred_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "4a3d935a-7a1f-450a-8c79-3d3b9ae95f41",
+      "name": "Retain Into Hindsight",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ bank_id: $('Seed Config').first().json.bank_id, submitted: $input.all().length, stored_ok: $input.all().filter(i => i.json.ok === true).length, failed: $input.all().filter(i => i.json.ok !== true).map(i => i.json.error_type || 'unknown'), note: 'SYNTHETIC demo incidents. Hindsight processes retains asynchronously; allow a minute before recall.' }) }}",
+        "options": {}
+      },
+      "id": "32924f68-05c1-4497-ab38-ec4306ba82f7",
+      "name": "Seeding Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        896,
+        0
+      ],
+      "executeOnce": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Seeder": {
+      "main": [
+        [
+          {
+            "node": "Seed Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed Config": {
+      "main": [
+        [
+          {
+            "node": "Build Synthetic Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Synthetic Dataset": {
+      "main": [
+        [
+          {
+            "node": "Retain Into Hindsight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retain Into Hindsight": {
+      "main": [
+        [
+          {
+            "node": "Seeding Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "63bf5494-3517-4c1f-b9a3-6898be0238e1",
+  "meta": {
+    "instanceId": "4100aefbfe553aaea60b7a7bb562e31b3c25abca3f1249dce21d9ee004eeb4ae"
+  },
+  "nodeGroups": [],
+  "id": "1V7RZlDYoNWUgsZj",
+  "tags": []
+}
